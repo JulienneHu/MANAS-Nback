@@ -109,9 +109,9 @@
         <br>
         <div id="duration-controls">
             <label for="duration-input">Test duration (minutes):</label>
-            <input type="number" id="duration-input" min="1" value="5" step="1">
+            <input type="number" id="duration-input" min="1" value="1" step="1">
             <button id="set-duration-btn">Set Duration</button>
-            <div id="duration-status">Current test time: 5 minutes</div>
+            <div id="duration-status">Current test time: 1 minute</div>
         </div>
         <br>
         <button id="start-test-btn">Start Test</button>
@@ -158,7 +158,7 @@
         let gameData = [];
         let gameStartTime;
         const matchProbability = 0.50; // 50% chance of n-back match
-        let gameDuration = 300000; // default 5 minutes in milliseconds
+        let gameDuration = 60000; // default 1 minute in milliseconds
         const persistenceTime = 900; // milliseconds
         const interStimulusInterval = 1000; // milliseconds
         let shouldRespond = false;
