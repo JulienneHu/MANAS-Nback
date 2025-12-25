@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>N-Back Test</title>
+    <style>
+        /* Ensures the body and html elements take up the entire height */
+        html, body {
+            height: 100%;
+            margin: 0;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column; /* Makes footer alignment easier */
+            justify-content: center;
+            align-items: center;
+            background-color: #f0f0f0;
+        }
+        #welcome-screen, #game-container {
+            text-align: center;
+            max-width: 600px;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        #welcome-screen {
+            display: block;
+        }
+        #game-container {
+            display: none;
+        }
+        #grid {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 5px;
+            margin: 20px auto;
+        }
+        .cell {
+            width: 100px;
+            height: 100px;
+            background-color: #fff;
+            border: 1px solid #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .dot {
+            width: 80%;
+            height: 80%;
+            background-color: #ff0000;
+            border-radius: 50%;
+            transition: transform 0.1s ease-in-out;
+        }
+        #score, #message, #timer {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        input, select, button {
+            margin: 10px 0;
+            padding: 5px;
+            font-size: 16px;
+        }
+        #instructions {
+            text-align: left;
+            margin-bottom: 20px;
+        }
+
+        /* Style for the footer */
+        footer {
+            position: absolute; /* Positions footer relative to the body */
+            bottom: 10px; /* Aligns it to the bottom */
+            left: 50%; /* Moves it to the center horizontally */
+            transform: translateX(-50%); /* Centers it exactly */
+            text-align: center; /* Centers text inside the footer */
+            width: 100%; /* Ensures footer content is centered */
+        }
+    </style>
+</head>
+<body>
+    <div id="welcome-screen">
+        <h1>Welcome to N-Back Test</h1>
+
+        <img src="assets/wm-task.png" alt="2back example" style="width: 100%;">
+        <p>2-back task</p>
+        <div id="instructions">
+            <h2>Instructions:</h2>
+            <ol>
+                <li>A red dot will appear at a random position in the 3x3 grid.</li>
+                <li>Your task is to remember the position of the dot 'n' steps back.</li>
+                <li>Press the SPACEBAR if the current dot position matches the one 'n' steps back.</li>
+                <li>After the game, a CSV file with your results will be downloaded.</li>
+            </ol>
+        </div>
+        <label for="participant-id">Participant ID:</label>
+        <input type="text" id="participant-id" required>
+        <br>
+        <label for="n-select">Select N:</label>
+        <select id="n-select">
+            <option value="1">1-back</option>
+            <option value="2" selected>2-back</option>
+            <option value="3">3-back</option>
+            <option value="4">4-back</option>
+            <option value="5">5-back</option>
+        </select>
+        <br>
+        <div id="duration-controls">
+            <label for="duration-input">Test duration (minutes):</label>
+            <input type="number" id="duration-input" min="1" value="5" step="1">
+            <button id="set-duration-btn">Set Duration</button>
+            <div id="duration-status">Current test time: 5 minutes</div>
+        </div>
+        <br>
+        <button id="start-test-btn">Start Test</button>
+    </div>
+
+    <div id="game-container">
+        <h1>N-Back Test</h1>
+        <div id="grid"></div>
+        <!-- <div id="score">Score: 0</div>
+        <div id="timer">Time: 2:00</div> -->
+        <div id="message"></div>
+        <button id="end-game-btn">End Game</button>
+    </div>
+
+    <footer>
+        &copy; 2024 Aakash Yadav | <a href="https://nimrobotics.com">nimRobotics.com</a>
+    </footer>
+
+    <script>
+        const welcomeScreen = document.getElementById('welcome-screen');
+        const gameContainer = document.getElementById('game-container');
+        const grid = document.getElementById('grid');
+        // const scoreElement = document.getElementById('score');
+        // const timerElement = document.getElementById('timer');
+        const messageElement = document.getElementById('message');
+        const startTestButton = document.getElementById('start-test-btn');
+        const endGameButton = document.getElementById('end-game-btn');
+        const participantIdInput = document.getElementById('participant-id');
+        const nSelect = document.getElementById('n-select');
+        const durationInput = document.getElementById('duration-input');
+        const setDurationButton = document.getElementById('set-duration-btn');
+        const durationStatus = document.getElementById('duration-status');
+
+        let cells = [];
+        let sequence = [];
+        let currentIndex = 0;
+        let score = 0;
+        let n = 2;
+        let intervalId;
+        let timerIntervalId;
+        let isGameRunning = false;
+        let participantId = '';
+        let lastStimulusTime = 0;
+        let gameData = [];
+        let gameStartTime;
+        const matchProbability = 0.50; // 50% chance of n-back match
+        let gameDuration = 300000; // default 5 minutes in milliseconds
+        const persistenceTime = 900; // milliseconds
+        const interStimulusInterval = 1000; // milliseconds
+        let shouldRespond = false;
+        let participantResponse = false;
+        let responseTime= '';
+
+
+        // Create the 3x3 grid
+        for (let i = 0; i < 9; i++) {
+            const cell = document.createElement('div');
+            cell.classList.add('cell');
+            const dot = document.createElement('div');
+            dot.classList.add('dot');
+            cell.appendChild(dot);
+            grid.appendChild(cell);
+            cells.push(dot);
+        }
+
+        function getRandomCell() {
+            if (currentIndex >= n && Math.random() < matchProbability) {
+                // matchProbability chance of n-back match
+                return sequence[currentIndex - n];
+            } else {
+                // 1 - matchProbability chance of a new random position
+                let newCell;
+                do {
+                    newCell = Math.floor(Math.random() * 9);
+                } while (currentIndex >= n && newCell === sequence[currentIndex - n]);
+                return newCell;
+            }
+        }
+
+        function showDot(cellIndex) {
+            // Clear any existing dots
+            cells.forEach(dot => {
+                dot.style.transform = 'scale(0)';
+            });
+            
+            // Show the dot after the ISI
+            setTimeout(() => {
+                cells[cellIndex].style.transform = 'scale(1)';
+                lastStimulusTime = Date.now();
+                
+                // Hide the dot after persistenceTime
+                setTimeout(() => {
+                    cells[cellIndex].style.transform = 'scale(0)';
+                }, persistenceTime);
+            }, interStimulusInterval);
+        }
+
+
+        function updateScore() {
+            scoreElement.textContent = `Score: ${score}`;
+        }
+
+        function updateTimer() {
+            const elapsedTime = Date.now() - gameStartTime;
+            const remainingTime = Math.max(0, gameDuration - elapsedTime);
+            const minutes = Math.floor(remainingTime / 60000);
+            const seconds = Math.floor((remainingTime % 60000) / 1000);
+            // timerElement.textContent = `Time: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+            if (remainingTime <= 0) {
+                endGame();
+            }
+        }
+
+        function checkMatch() {
+            // const responseTime = Date.now() - lastStimulusTime;
+            shouldRespond = currentIndex > n && sequence[currentIndex - 1] === sequence[currentIndex - 1 - n];
+            const isCorrect = currentIndex > n && sequence[currentIndex - 1] === sequence[currentIndex - 1 - n];
+            
+            // if (isCorrect) {
+            //     score++;
+            //     updateScore();
+            //     messageElement.textContent = "Correct!";
+            // } else {
+            //     messageElement.textContent = "Incorrect";
+            // }
+
+            gameData.push({
+                trial: currentIndex,
+                shouldRespond: shouldRespond ? 1 : 0,
+                response: participantResponse ? 1 : 0,
+                responseTime: responseTime,
+                elapsedTime: Date.now() - gameStartTime
+            });
+
+            setTimeout(() => {
+                messageElement.textContent = "";
+            }, 1000);
+
+            participantResponse = false;
+            responseTime = '';
+        }
+
+        function nextTurn() {
+            const nextCell = getRandomCell();
+            if (currentIndex >= n) {
+                checkMatch();
+            }
+            sequence.push(nextCell);
+            showDot(nextCell);
+            currentIndex++;
+        }
+
+        function startGame() {
+            sequence = [];
+            currentIndex = 0;
+            score = 0;
+            gameData = [];
+            // updateScore();
+            isGameRunning = true;
+            gameStartTime = Date.now();
+
+            intervalId = setInterval(nextTurn, persistenceTime + interStimulusInterval); // Show a new dot every persistenceTime seconds
+            timerIntervalId = setInterval(updateTimer, 1000); // Update timer every second
+        }
+
+        function endGame() {
+            clearInterval(intervalId);
+            clearInterval(timerIntervalId);
+            isGameRunning = false;
+            // alert(`Game Over! Your score: ${score}\nParticipant ID: ${participantId}\nN-back level: ${n}`);
+            saveCSV();
+            welcomeScreen.style.display = 'block';
+            gameContainer.style.display = 'none';
+        }
+
+        function setGameDuration(minutes) {
+            gameDuration = minutes * 60000;
+            const label = minutes === 1 ? 'minute' : 'minutes';
+            durationStatus.textContent = `Current test time: ${minutes} ${label}`;
+        }
+
+        function saveCSV() {
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "ID,n,stim,ShouldRespond,Response,Response Time (ms),Elapsed Time (ms)\n";
+            
+            gameData.forEach(data => {
+                csvContent += `${participantId},${n},${data.trial},${data.shouldRespond},${data.response},${data.responseTime},${data.elapsedTime}\n`;
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `n-back_results_${participantId}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        startTestButton.addEventListener('click', () => {
+            participantId = participantIdInput.value.trim();
+            if (participantId === '') {
+                alert('Please enter a Participant ID');
+                return;
+            }
+            n = parseInt(nSelect.value);
+            const inputMinutes = parseFloat(durationInput.value);
+            if (!isNaN(inputMinutes) && inputMinutes > 0) {
+                setGameDuration(inputMinutes);
+            }
+            welcomeScreen.style.display = 'none';
+            gameContainer.style.display = 'block';
+            startGame();
+        });
+
+        setDurationButton.addEventListener('click', () => {
+            const minutes = parseFloat(durationInput.value);
+            if (isNaN(minutes) || minutes <= 0) {
+                alert('Please enter a valid duration (in minutes)');
+                return;
+            }
+            setGameDuration(minutes);
+        });
+
+        endGameButton.addEventListener('click', endGame);
+
+        document.addEventListener('keydown', (event) => {
+            if (event.code === 'Space' && isGameRunning) {
+                event.preventDefault();
+                // checkMatch();
+                participantResponse = true;
+                responseTime = Date.now() - lastStimulusTime;
+            }
+        });
+    </script>
+</body>
+</html>
