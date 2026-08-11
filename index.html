@@ -227,6 +227,14 @@
             }
         }
 
+        function getPositionLabel(cellIndex) {
+            // Grid cells are indexed 0-8, row by row from top-left.
+            // Convert to (column, row) with (1,1) = bottom-left, (3,3) = top-right.
+            const col = (cellIndex % 3) + 1;
+            const row = 3 - Math.floor(cellIndex / 3);
+            return `"(${col},${row})"`;
+        }
+
         function checkMatch() {
             // const responseTime = Date.now() - lastStimulusTime;
             shouldRespond = currentIndex > n && sequence[currentIndex - 1] === sequence[currentIndex - 1 - n];
@@ -242,6 +250,7 @@
 
             gameData.push({
                 trial: currentIndex,
+                position: getPositionLabel(sequence[currentIndex - 1]),
                 shouldRespond: shouldRespond ? 1 : 0,
                 response: participantResponse ? 1 : 0,
                 responseTime: responseTime,
@@ -296,10 +305,10 @@
 
         function saveCSV() {
             let csvContent = "data:text/csv;charset=utf-8,";
-            csvContent += "ID,n,stim,ShouldRespond,Response,Response Time (ms),Elapsed Time (ms)\n";
-            
+            csvContent += "ID,n,stim,Position (col;row),ShouldRespond,Response,Response Time (ms),Elapsed Time (ms)\n";
+
             gameData.forEach(data => {
-                csvContent += `${participantId},${n},${data.trial},${data.shouldRespond},${data.response},${data.responseTime},${data.elapsedTime}\n`;
+                csvContent += `${participantId},${n},${data.trial},${data.position},${data.shouldRespond},${data.response},${data.responseTime},${data.elapsedTime}\n`;
             });
 
             const encodedUri = encodeURI(csvContent);
